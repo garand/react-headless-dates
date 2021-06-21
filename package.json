@@ -2,19 +2,16 @@
   "name": "react-temporal",
   "version": "0.1.0",
   "description": "Headless Datetime Picker for React",
-  "main": "dist/useTemporal.js",
-  "sideEffects": false,
-  "scripts": {
-    "dev": "esbuild src/useTemporal.ts --outfile=./dist/useTemporal.js --watch --sourcemap",
-    "build": "rimraf dist && esbuild src/useTemporal.ts --outfile=./dist/useTemporal.js --minify"
-  },
-  "files": [
-    "dist"
-  ],
+  "author": "Anthony Garand",
+  "license": "ISC",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/garand/react-temporal.git"
   },
+  "bugs": {
+    "url": "https://github.com/garand/react-temporal/issues"
+  },
+  "homepage": "https://github.com/garand/react-temporal#readme",
   "keywords": [
     "react",
     "calendar",
@@ -22,16 +19,25 @@
     "datetime",
     "headless"
   ],
-  "author": "Anthony Garand",
-  "license": "ISC",
-  "bugs": {
-    "url": "https://github.com/garand/react-temporal/issues"
+  "main": "./dist/useTemporal.js",
+  "types": "./dist/useTemporal.d.ts",
+  "sideEffects": false,
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "dev": "rimraf dist && concurrently npm:dev:*",
+    "dev:src": "esbuild src/useTemporal.ts --outfile=./dist/useTemporal.js --watch --sourcemap",
+    "dev:types": "tsc --watch",
+    "build": "rimraf dist && concurrently npm:build:*",
+    "build:src": "esbuild src/useTemporal.ts --outfile=./dist/useTemporal.js --minify",
+    "build:types": "tsc"
   },
-  "homepage": "https://github.com/garand/react-temporal#readme",
   "devDependencies": {
     "@types/react": "^17.0.0",
     "@typescript-eslint/eslint-plugin": "^4.27.0",
     "@typescript-eslint/parser": "^4.27.0",
+    "concurrently": "^6.2.0",
     "esbuild": "^0.12.9",
     "eslint": "^7.29.0",
     "eslint-config-prettier": "^8.3.0",
