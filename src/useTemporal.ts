@@ -348,7 +348,7 @@ export function useTemporal(config?: TemporalConfig) {
         }
       };
 
-      return [...dates];
+      return Array.from(dates);
     },
     [computedConfig.weekStartIndex, getDateProps, selectedDate]
   );
