@@ -1,6 +1,6 @@
 {
   "name": "react-temporal",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Headless Datetime Picker for React",
   "main": "dist/useTemporal.js",
   "sideEffects": false,
