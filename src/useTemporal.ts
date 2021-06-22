@@ -624,9 +624,11 @@ export function getOrdinal(number: number) {
 }
 
 function getDateAtStartOfDay(date?: Date) {
+  if (!date) return;
   return new Date(new Date(date.setHours(0, 0, 0, 0)));
 }
 
 function getDateAtEndOfDay(date?: Date) {
+  if (!date) return;
   return new Date(new Date(date.setHours(23, 59, 59, 999)));
 }
