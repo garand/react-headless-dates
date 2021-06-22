@@ -4,18 +4,29 @@ interface TemporalConfig {
   locale?: string;
   initialDate?: Date;
   weekStartIndex?: string | number;
+  type?: "single" | "range";
 }
 
 interface Day {
   date: Date;
   isToday: boolean;
   isSelected?: boolean;
+  isSelectedRange?: boolean;
+  isSelectedRangeStart?: boolean;
+  isSelectedRangeEnd?: boolean;
+  isPreviewedRange?: boolean;
+  isPreviewedRangeStart?: boolean;
+  isPreviewedRangeEnd?: boolean;
   isWeekday: boolean;
   isWeekend: boolean;
   isCurrentMonth: boolean;
   isPreviousMonth: boolean;
   isNextMonth: boolean;
   getDateProps: () => DateProps;
+}
+
+interface CalendarProps {
+  onMouseLeave?: React.MouseEventHandler<HTMLElement>;
 }
 
 interface DateProps {
@@ -40,6 +51,7 @@ export function useTemporal(config?: TemporalConfig) {
       locale: "default",
       initialDate: new Date(),
       weekStartIndex: 0,
+      type: "single",
       ...config,
     }),
     [config]
@@ -50,6 +62,16 @@ export function useTemporal(config?: TemporalConfig) {
   );
 
   const [selectedDate, setSelectedDate] = React.useState<Date>();
+
+  const [selectedRange, setSelectedRange] = React.useState<{
+    start: Date | null;
+    end: Date | null;
+  }>({ start: null, end: null });
+
+  const [previewedRange, setPreviewedRange] = React.useState<{
+    start: Date | null;
+    end: Date | null;
+  }>({ start: null, end: null });
 
   const [focusedDate, setFocusedDate] = React.useState<Date | undefined>(
     new Date(new Date(computedConfig.initialDate))
@@ -68,15 +90,38 @@ export function useTemporal(config?: TemporalConfig) {
     setCalendarMonth(newDate);
   }, []);
 
+  const handleSetPreviewedRange = React.useCallback(
+    (date: Date) => {
+      if ((selectedRange.start && selectedRange.end) || !selectedRange.start)
+        return;
+
+      const newDate = new Date(date);
+
+      if (newDate <= selectedRange.start)
+        setPreviewedRange({ start: newDate, end: selectedRange.start });
+      else if (newDate > selectedRange.start)
+        setPreviewedRange({ start: selectedRange.start, end: newDate });
+    },
+    [selectedRange.end, selectedRange.start]
+  );
+
   const handleSetFocusedDate = React.useCallback(
     (date: Date | undefined) => {
       setFocusedDate(date);
+
+      if (computedConfig.type === "range" && date)
+        handleSetPreviewedRange(date);
 
       if (date && date.getMonth() !== calendarMonth.getMonth()) {
         handleSetCalendarMonth(date);
       }
     },
-    [calendarMonth, handleSetCalendarMonth]
+    [
+      calendarMonth,
+      computedConfig.type,
+      handleSetCalendarMonth,
+      handleSetPreviewedRange,
+    ]
   );
 
   const handleSetSelectedDate = React.useCallback(
@@ -88,6 +133,34 @@ export function useTemporal(config?: TemporalConfig) {
       handleSetCalendarMonth(newDate);
     },
     [handleSetCalendarMonth, handleSetFocusedDate]
+  );
+
+  const handleSetSelectedRange = React.useCallback(
+    (date: Date) => {
+      const newDate = new Date(date);
+
+      if (!selectedRange.start) {
+        setSelectedRange((range) => ({ ...range, start: newDate }));
+      } else if (!selectedRange.end) {
+        if (newDate <= selectedRange.start)
+          setSelectedRange((range) => ({ start: newDate, end: range.start }));
+        if (newDate > selectedRange.start)
+          setSelectedRange((range) => ({ ...range, end: newDate }));
+        setPreviewedRange({ start: null, end: null });
+      } else {
+        setSelectedRange({ start: newDate, end: null });
+        setPreviewedRange({ start: null, end: null });
+      }
+
+      handleSetFocusedDate(newDate);
+      handleSetCalendarMonth(newDate);
+    },
+    [
+      handleSetCalendarMonth,
+      handleSetFocusedDate,
+      selectedRange.end,
+      selectedRange.start,
+    ]
   );
 
   const setMonth = React.useCallback(
@@ -270,7 +343,21 @@ export function useTemporal(config?: TemporalConfig) {
           },
           key: date.toDateString(),
           tabIndex: date.getMonth() === currentMonth ? undefined : -1,
-          onClick: () => handleSetSelectedDate(date),
+          onClick: () => {
+            switch (computedConfig.type) {
+              case "single":
+                handleSetSelectedDate(date);
+                break;
+              case "range":
+                handleSetSelectedRange(date);
+                break;
+            }
+          },
+          ...(computedConfig.type === "range" && {
+            onMouseEnter: () => {
+              handleSetPreviewedRange(date);
+            },
+          }),
           onFocus: () => {
             if (focusedDateRef.current?.toDateString() !== date.toDateString())
               setFocusedDate(date);
@@ -295,7 +382,13 @@ export function useTemporal(config?: TemporalConfig) {
           },
         };
       },
-      [handleSetFocusedDate, handleSetSelectedDate]
+      [
+        computedConfig.type,
+        handleSetFocusedDate,
+        handleSetPreviewedRange,
+        handleSetSelectedDate,
+        handleSetSelectedRange,
+      ]
     );
 
   const getDates = React.useCallback(
@@ -333,8 +426,32 @@ export function useTemporal(config?: TemporalConfig) {
           yield {
             date: yieldDate,
             isToday: yieldDate.toDateString() === new Date().toDateString(),
-            isSelected:
-              yieldDate.toDateString() === selectedDate?.toDateString(),
+            ...(computedConfig.type === "single" && {
+              isSelected:
+                yieldDate.toDateString() === selectedDate?.toDateString(),
+            }),
+            ...(computedConfig.type === "range" && {
+              isSelectedRange:
+                !!selectedRange.start &&
+                yieldDate >= selectedRange.start &&
+                !!selectedRange.end &&
+                yieldDate <= selectedRange.end,
+              isSelectedRangeStart:
+                yieldDate.toDateString() ===
+                selectedRange.start?.toDateString(),
+              isSelectedRangeEnd:
+                yieldDate.toDateString() === selectedRange.end?.toDateString(),
+              isPreviewedRange:
+                !!previewedRange.start &&
+                yieldDate >= previewedRange.start &&
+                !!previewedRange.end &&
+                yieldDate <= previewedRange.end,
+              isPreviewedRangeStart:
+                yieldDate.toDateString() ===
+                previewedRange.start?.toDateString(),
+              isPreviewedRangeEnd:
+                yieldDate.toDateString() === previewedRange.end?.toDateString(),
+            }),
             isWeekday: [1, 2, 3, 4, 5].includes(yieldDate.getDay()),
             isWeekend: [0, 6].includes(yieldDate.getDay()),
             isCurrentMonth: yieldDate.getMonth() === startMonth,
@@ -350,13 +467,33 @@ export function useTemporal(config?: TemporalConfig) {
 
       return Array.from(dates);
     },
-    [computedConfig.weekStartIndex, getDateProps, selectedDate]
+    [
+      computedConfig.type,
+      computedConfig.weekStartIndex,
+      getDateProps,
+      previewedRange.end,
+      previewedRange.start,
+      selectedDate,
+      selectedRange.end,
+      selectedRange.start,
+    ]
   );
 
   const dates = React.useMemo(
     () => getDates(calendarMonth),
     [calendarMonth, getDates]
   );
+
+  const getCalendarProps: () => CalendarProps = React.useCallback(() => {
+    return {
+      ...(computedConfig.type === "range" && {
+        onMouseLeave: () => {
+          if (computedConfig.type === "range")
+            setPreviewedRange({ start: null, end: null });
+        },
+      }),
+    };
+  }, [computedConfig.type]);
 
   const getInputProps: () => InputProps = React.useCallback(() => {
     return {
@@ -409,7 +546,9 @@ export function useTemporal(config?: TemporalConfig) {
 
   return {
     getInputProps,
+    getCalendarProps,
     selectedDate,
+    selectedRange,
     days,
     months,
     calendar: {
