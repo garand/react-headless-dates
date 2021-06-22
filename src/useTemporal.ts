@@ -3,6 +3,8 @@ import * as React from "react";
 export interface TemporalConfig {
   locale?: string;
   initialDate?: Date;
+  defaultSelectedDate?: Date;
+  defaultSelectedRange?: SelectedRange;
   weekStartIndex?: string | number;
   type?: "single" | "range";
 }
@@ -45,14 +47,30 @@ export interface InputProps {
   onKeyDown: React.KeyboardEventHandler<HTMLInputElement>;
 }
 
+export interface SelectedRange {
+  start?: Date;
+  end?: Date;
+}
+
 export function useTemporal(config?: TemporalConfig) {
   const computedConfig = React.useMemo(
     () => ({
-      locale: "default",
-      initialDate: new Date(),
-      weekStartIndex: 0,
-      type: "single",
-      ...config,
+      locale: config?.locale || "default",
+      initialDate: config?.initialDate || new Date(),
+      defaultSelectedDate:
+        (config?.defaultSelectedDate &&
+          new Date(config?.defaultSelectedDate)) ||
+        undefined,
+      defaultSelectedRange: {
+        start:
+          config?.defaultSelectedRange?.start &&
+          new Date(config?.defaultSelectedRange?.start),
+        end:
+          config?.defaultSelectedRange?.end &&
+          new Date(config?.defaultSelectedRange?.end),
+      },
+      weekStartIndex: config?.weekStartIndex || 0,
+      type: config?.type || "single",
     }),
     [config]
   );
@@ -61,17 +79,15 @@ export function useTemporal(config?: TemporalConfig) {
     new Date(new Date(computedConfig.initialDate).setDate(1))
   );
 
-  const [selectedDate, setSelectedDate] = React.useState<Date>();
+  const [selectedDate, setSelectedDate] = React.useState<Date | undefined>(
+    computedConfig.defaultSelectedDate
+  );
 
-  const [selectedRange, setSelectedRange] = React.useState<{
-    start: Date | null;
-    end: Date | null;
-  }>({ start: null, end: null });
+  const [selectedRange, setSelectedRange] = React.useState<SelectedRange>(
+    computedConfig.defaultSelectedRange
+  );
 
-  const [previewedRange, setPreviewedRange] = React.useState<{
-    start: Date | null;
-    end: Date | null;
-  }>({ start: null, end: null });
+  const [previewedRange, setPreviewedRange] = React.useState<SelectedRange>({});
 
   const [focusedDate, setFocusedDate] = React.useState<Date | undefined>(
     new Date(new Date(computedConfig.initialDate))
@@ -445,9 +461,11 @@ export function useTemporal(config?: TemporalConfig) {
                 !!selectedRange.end &&
                 yieldDate <= selectedRange.end,
               isSelectedRangeStart:
+                !!selectedRange.start &&
                 yieldDate.toDateString() ===
-                selectedRange.start?.toDateString(),
+                  selectedRange.start?.toDateString(),
               isSelectedRangeEnd:
+                !!selectedRange.end &&
                 yieldDate.toDateString() === selectedRange.end?.toDateString(),
               isPreviewedRange:
                 !!previewedRange.start &&
@@ -496,8 +514,7 @@ export function useTemporal(config?: TemporalConfig) {
     return {
       ...(computedConfig.type === "range" && {
         onMouseLeave: () => {
-          if (computedConfig.type === "range")
-            setPreviewedRange({ start: null, end: null });
+          if (computedConfig.type === "range") setPreviewedRange({});
         },
       }),
     };
