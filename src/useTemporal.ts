@@ -156,16 +156,27 @@ export function useTemporal(config?: TemporalConfig) {
       const newDate = new Date(date);
 
       if (!selectedRange.start) {
-        setSelectedRange((range) => ({ ...range, start: newDate }));
+        setSelectedRange((range) => ({
+          ...range,
+          start: getDateAtStartOfDay(newDate),
+        }));
       } else if (!selectedRange.end) {
-        if (newDate <= selectedRange.start)
-          setSelectedRange((range) => ({ start: newDate, end: range.start }));
-        if (newDate > selectedRange.start)
-          setSelectedRange((range) => ({ ...range, end: newDate }));
-        setPreviewedRange({ start: null, end: null });
+        if (newDate <= selectedRange.start) {
+          setSelectedRange((range) => ({
+            start: getDateAtStartOfDay(newDate),
+            end: getDateAtEndOfDay(range.start),
+          }));
+        }
+        if (newDate > selectedRange.start) {
+          setSelectedRange((range) => ({
+            ...range,
+            end: getDateAtEndOfDay(newDate),
+          }));
+        }
+        setPreviewedRange({});
       } else {
-        setSelectedRange({ start: newDate, end: null });
-        setPreviewedRange({ start: null, end: null });
+        setSelectedRange({ start: getDateAtStartOfDay(newDate) });
+        setPreviewedRange({});
       }
 
       handleSetFocusedDate(newDate);
@@ -610,4 +621,12 @@ export function getOrdinal(number: number) {
   };
 
   return `${number}${ordinals[pluralRules.select(number)]}`;
+}
+
+function getDateAtStartOfDay(date?: Date) {
+  return new Date(new Date(date.setHours(0, 0, 0, 0)));
+}
+
+function getDateAtEndOfDay(date?: Date) {
+  return new Date(new Date(date.setHours(23, 59, 59, 999)));
 }
