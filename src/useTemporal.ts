@@ -292,6 +292,14 @@ export function useTemporal(config?: TemporalConfig) {
     handleSetFocusedDate(undefined);
   }, [handleSetFocusedDate, handleSetSelectedDate, selectedDate]);
 
+  /**
+   * Select Ranges
+   */
+  const clearSelectedRange = React.useCallback(() => {
+    setSelectedRange({});
+    setPreviewedRange({});
+  }, []);
+
   const days = React.useMemo(() => {
     const days = [];
 
@@ -567,6 +575,7 @@ export function useTemporal(config?: TemporalConfig) {
       selectPreviousDate,
       selectNextDate,
       setSelectedDate: handleSetSelectedDate,
+      clearSelectedRange,
     },
   };
 }
