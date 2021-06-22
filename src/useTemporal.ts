@@ -1,13 +1,13 @@
 import * as React from "react";
 
-interface TemporalConfig {
+export interface TemporalConfig {
   locale?: string;
   initialDate?: Date;
   weekStartIndex?: string | number;
   type?: "single" | "range";
 }
 
-interface Day {
+export interface Day {
   date: Date;
   isToday: boolean;
   isSelected?: boolean;
@@ -25,11 +25,11 @@ interface Day {
   getDateProps: () => DateProps;
 }
 
-interface CalendarProps {
+export interface CalendarProps {
   onMouseLeave?: React.MouseEventHandler<HTMLElement>;
 }
 
-interface DateProps {
+export interface DateProps {
   ref: React.RefCallback<HTMLElement>;
   key: string;
   tabIndex: -1 | undefined;
@@ -38,7 +38,7 @@ interface DateProps {
   onKeyDown: React.KeyboardEventHandler<HTMLElement>;
 }
 
-interface InputProps {
+export interface InputProps {
   value: string;
   onChange: React.ChangeEventHandler<HTMLInputElement>;
   onKeyUp: React.KeyboardEventHandler<HTMLInputElement>;
