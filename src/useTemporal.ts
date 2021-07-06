@@ -108,9 +108,11 @@ export function useTemporal(defaultConfig?: Partial<TemporalConfig>) {
       if (typeof config.value === "string") {
         switch (config.type) {
           case "single": {
+            // @ts-expect-error Need to filter out keys
             return dynamicDates[config.value];
           }
           case "range": {
+            // @ts-expect-error Need to filter out keys
             return dynamicDateRanges[config.value];
           }
         }
@@ -119,9 +121,11 @@ export function useTemporal(defaultConfig?: Partial<TemporalConfig>) {
       if (typeof value === "string") {
         switch (config.type) {
           case "single": {
+            // @ts-expect-error Need to filter out keys
             return dynamicDates[value];
           }
           case "range": {
+            // @ts-expect-error Need to filter out keys
             return dynamicDateRanges[value];
           }
         }
