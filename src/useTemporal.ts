@@ -1,12 +1,14 @@
 import * as React from "react";
 
 export interface TemporalConfig {
-  locale?: string;
-  initialDate?: Date;
-  defaultSelectedDate?: Date;
-  defaultSelectedRange?: SelectedRange;
-  weekStartIndex?: string | number;
-  type?: "single" | "range";
+  locale: string;
+  defaultValue?: TemporalValue;
+  value?: TemporalValue;
+  onValueChange?: (value: TemporalValue) => void;
+  defaultCalendarMonth: Date;
+  monthsVisible: string | number;
+  weekStartIndex: string | number;
+  type: "single" | "range";
 }
 
 export interface Day {
@@ -47,86 +49,145 @@ export interface InputProps {
   onKeyDown: React.KeyboardEventHandler<HTMLInputElement>;
 }
 
-export interface SelectedRange {
+export interface DateRange {
   start?: Date;
   end?: Date;
 }
 
-export function useTemporal(config?: TemporalConfig) {
-  const computedConfig = React.useMemo(
+export type DynamicDate = keyof typeof dynamicDates;
+export type DynamicDateRange = keyof typeof dynamicDateRanges;
+
+export type TemporalValue =
+  | Date
+  | DateRange
+  | DynamicDate
+  | DynamicDateRange
+  | undefined;
+
+export function useTemporal(defaultConfig?: Partial<TemporalConfig>) {
+  const config: TemporalConfig = React.useMemo(
     () => ({
-      locale: config?.locale || "default",
-      initialDate: config?.initialDate || new Date(),
-      defaultSelectedDate:
-        (config?.defaultSelectedDate &&
-          new Date(config?.defaultSelectedDate)) ||
-        undefined,
-      defaultSelectedRange: {
-        start:
-          config?.defaultSelectedRange?.start &&
-          new Date(config?.defaultSelectedRange?.start),
-        end:
-          config?.defaultSelectedRange?.end &&
-          new Date(config?.defaultSelectedRange?.end),
-      },
-      weekStartIndex: config?.weekStartIndex || 0,
-      type: config?.type || "single",
+      locale: defaultConfig?.locale || "default",
+      value: defaultConfig?.value,
+      defaultValue: defaultConfig?.defaultValue,
+      defaultCalendarMonth: defaultConfig?.defaultCalendarMonth || new Date(),
+      weekStartIndex: defaultConfig?.weekStartIndex || 0,
+      type: defaultConfig?.type || "single",
+      onValueChange: defaultConfig?.onValueChange,
+      monthsVisible: defaultConfig?.monthsVisible || 1,
     }),
-    [config]
+    [
+      defaultConfig?.defaultCalendarMonth,
+      defaultConfig?.defaultValue,
+      defaultConfig?.locale,
+      defaultConfig?.monthsVisible,
+      defaultConfig?.onValueChange,
+      defaultConfig?.type,
+      defaultConfig?.value,
+      defaultConfig?.weekStartIndex,
+    ]
+  );
+
+  const isControlled = !!(
+    defaultConfig && Object.keys(defaultConfig).includes("value")
   );
 
   const [calendarMonth, setCalendarMonth] = React.useState<Date>(
-    new Date(new Date(computedConfig.initialDate).setDate(1))
+    new Date(
+      config.defaultCalendarMonth?.getFullYear(),
+      config.defaultCalendarMonth?.getMonth()
+    )
   );
 
-  const [selectedDate, setSelectedDate] = React.useState<Date | undefined>(
-    computedConfig.defaultSelectedDate
+  const [value, setValue] = React.useState<TemporalValue>(
+    isControlled ? config.value : config.defaultValue
   );
 
-  const [selectedRange, setSelectedRange] = React.useState<SelectedRange>(
-    computedConfig.defaultSelectedRange
-  );
+  const computedValue = React.useMemo(() => {
+    if (isControlled) {
+      if (typeof config.value === "string") {
+        switch (config.type) {
+          case "single": {
+            return dynamicDates[config.value];
+          }
+          case "range": {
+            return dynamicDateRanges[config.value];
+          }
+        }
+      } else return config.value;
+    } else {
+      if (typeof value === "string") {
+        switch (config.type) {
+          case "single": {
+            return dynamicDates[value];
+          }
+          case "range": {
+            return dynamicDateRanges[value];
+          }
+        }
+      } else return value;
+    }
+  }, [config.type, config.value, isControlled, value]);
 
-  const [previewedRange, setPreviewedRange] = React.useState<SelectedRange>({});
+  const [previewedRange, setPreviewedRange] = React.useState<DateRange>();
 
-  const [focusedDate, setFocusedDate] = React.useState<Date | undefined>(
-    new Date(new Date(computedConfig.initialDate))
-  );
+  const [focusedDate, setFocusedDate] = React.useState<Date | undefined>();
 
-  const focusedDateRef = React.useRef<Date | undefined>(focusedDate);
+  const focusedDateRef = React.useRef<Date | undefined>();
+  focusedDateRef.current = focusedDate;
 
-  const dateRefs = React.useRef<{ [key: string]: HTMLElement }>({});
+  /**
+   * Refs for the HTML elements of the visible dates.
+   * Used to set focus on a date.
+   */
+  const visibleDateRefs = React.useRef<{ [key: string]: HTMLElement }>({});
 
   const keysPressed = React.useRef<{ [key: string]: true | undefined }>({});
 
-  const handleSetCalendarMonth = React.useCallback((date: Date) => {
-    if (!date) return;
-    const newDate = new Date(new Date(date).setDate(1));
+  /**
+   * Used to set the visible calendar month date to the first day of the month
+   * to fix issues where getting the previous month from the last day of the
+   * month can sometimes return the same month.
+   */
+  const handleSetCalendarMonth = React.useCallback(
+    (date: Date | string | number) => {
+      if (!date) return;
 
-    setCalendarMonth(newDate);
-  }, []);
+      if (typeof date === "number" || typeof date === "string") {
+        setCalendarMonth(new Date(calendarMonth.getFullYear(), Number(date)));
+      } else {
+        const newDate = new Date(date.getFullYear(), date.getMonth());
+
+        setCalendarMonth(newDate);
+      }
+    },
+    [calendarMonth]
+  );
 
   const handleSetPreviewedRange = React.useCallback(
     (date: Date) => {
-      if ((selectedRange.start && selectedRange.end) || !selectedRange.start)
+      if (config.type !== "range") return;
+      if (!computedValue) return;
+      if (typeof computedValue === "string" || computedValue instanceof Date)
         return;
 
-      const newDate = new Date(date);
+      if ((computedValue.start && computedValue.end) || !computedValue.start)
+        return;
 
-      if (newDate <= selectedRange.start)
-        setPreviewedRange({ start: newDate, end: selectedRange.start });
-      else if (newDate > selectedRange.start)
-        setPreviewedRange({ start: selectedRange.start, end: newDate });
+      if (date <= computedValue.start) {
+        setPreviewedRange({ start: date, end: computedValue.start });
+      } else {
+        setPreviewedRange({ start: computedValue.start, end: date });
+      }
     },
-    [selectedRange.end, selectedRange.start]
+    [config.type, computedValue]
   );
 
   const handleSetFocusedDate = React.useCallback(
     (date: Date | undefined) => {
       setFocusedDate(date);
 
-      if (computedConfig.type === "range" && date)
-        handleSetPreviewedRange(date);
+      if (config.type === "range" && date) handleSetPreviewedRange(date);
 
       if (date && date.getMonth() !== calendarMonth.getMonth()) {
         handleSetCalendarMonth(date);
@@ -134,73 +195,80 @@ export function useTemporal(config?: TemporalConfig) {
     },
     [
       calendarMonth,
-      computedConfig.type,
+      config.type,
       handleSetCalendarMonth,
       handleSetPreviewedRange,
     ]
   );
 
-  const handleSetSelectedDate = React.useCallback(
-    (date: Date) => {
-      const newDate = new Date(date);
-
-      setSelectedDate(newDate);
-      handleSetFocusedDate(newDate);
-      handleSetCalendarMonth(newDate);
+  const handleSetValue = React.useCallback(
+    (newValue: TemporalValue) => {
+      if (isControlled) {
+        if (typeof config.onValueChange === "function")
+          config?.onValueChange(newValue);
+        else
+          console.error(
+            "useTemporal: You provided a value, but did not provide an onValueChange handler."
+          );
+      } else setValue(newValue);
     },
-    [handleSetCalendarMonth, handleSetFocusedDate]
+    [config, isControlled]
   );
 
-  const handleSetSelectedRange = React.useCallback(
-    (date: Date) => {
-      const newDate = new Date(date);
+  const handleValueChange = React.useCallback(
+    (newValue: TemporalValue) => {
+      switch (config.type) {
+        case "single": {
+          if (!(newValue instanceof Date)) return;
+          handleSetValue(newValue);
+          handleSetFocusedDate(newValue);
+          break;
+        }
+        case "range": {
+          if (!newValue) return;
 
-      if (!selectedRange.start) {
-        setSelectedRange((range) => ({
-          ...range,
-          start: getDateAtStartOfDay(newDate),
-        }));
-      } else if (!selectedRange.end) {
-        if (newDate <= selectedRange.start) {
-          setSelectedRange((range) => ({
-            start: getDateAtStartOfDay(newDate),
-            end: getDateAtEndOfDay(range.start),
-          }));
+          if (newValue && !(newValue instanceof Date)) {
+            // Date Range or Dynamic Date Range
+            handleSetValue(newValue);
+          } else {
+            if (
+              typeof computedValue === "string" ||
+              computedValue instanceof Date
+            )
+              return;
+            if (!computedValue?.start) {
+              handleSetValue({
+                ...computedValue,
+                start: getDateAtStartOfDay(newValue),
+              });
+            } else if (!computedValue.end) {
+              if (newValue <= computedValue.start) {
+                handleSetValue({
+                  start: getDateAtStartOfDay(newValue),
+                  end: getDateAtEndOfDay(computedValue.start),
+                });
+              }
+              if (newValue > computedValue.start) {
+                handleSetValue({
+                  ...computedValue,
+                  end: getDateAtEndOfDay(newValue),
+                });
+              }
+              setPreviewedRange({});
+            } else {
+              handleSetValue({ start: getDateAtStartOfDay(newValue) });
+              setPreviewedRange({});
+            }
+
+            handleSetFocusedDate(newValue);
+          }
         }
-        if (newDate > selectedRange.start) {
-          setSelectedRange((range) => ({
-            ...range,
-            end: getDateAtEndOfDay(newDate),
-          }));
-        }
-        setPreviewedRange({});
-      } else {
-        setSelectedRange({ start: getDateAtStartOfDay(newDate) });
-        setPreviewedRange({});
       }
-
-      handleSetFocusedDate(newDate);
-      handleSetCalendarMonth(newDate);
     },
-    [
-      handleSetCalendarMonth,
-      handleSetFocusedDate,
-      selectedRange.end,
-      selectedRange.start,
-    ]
+    [config.type, computedValue, handleSetFocusedDate, handleSetValue]
   );
 
-  const setMonth = React.useCallback(
-    (month: string | number) => {
-      const newDate = new Date(new Date(calendarMonth).setMonth(Number(month)));
-
-      handleSetCalendarMonth(newDate);
-      handleSetFocusedDate(undefined);
-    },
-    [calendarMonth, handleSetCalendarMonth, handleSetFocusedDate]
-  );
-
-  const setPreviousMonth = React.useCallback(() => {
+  const setPreviousCalendarMonth = React.useCallback(() => {
     const newDate = new Date(
       new Date(calendarMonth).setMonth(calendarMonth.getMonth() - 1)
     );
@@ -209,7 +277,7 @@ export function useTemporal(config?: TemporalConfig) {
     handleSetFocusedDate(undefined);
   }, [calendarMonth, handleSetCalendarMonth, handleSetFocusedDate]);
 
-  const setNextMonth = React.useCallback(() => {
+  const setNextCalendarMonth = React.useCallback(() => {
     const newDate = new Date(
       new Date(calendarMonth).setMonth(calendarMonth.getMonth() + 1)
     );
@@ -218,7 +286,7 @@ export function useTemporal(config?: TemporalConfig) {
     handleSetFocusedDate(undefined);
   }, [calendarMonth, handleSetCalendarMonth, handleSetFocusedDate]);
 
-  const setYear = React.useCallback(
+  const setCalendarYear = React.useCallback(
     (year: string | number) => {
       const newDate = new Date(
         new Date(calendarMonth).setFullYear(Number(String(year).substr(0, 4)))
@@ -230,7 +298,7 @@ export function useTemporal(config?: TemporalConfig) {
     [calendarMonth, handleSetCalendarMonth, handleSetFocusedDate]
   );
 
-  const setPreviousYear = React.useCallback(() => {
+  const setPreviousCalendarYear = React.useCallback(() => {
     const newDate = new Date(
       new Date(calendarMonth).setFullYear(calendarMonth.getFullYear() - 1)
     );
@@ -239,7 +307,7 @@ export function useTemporal(config?: TemporalConfig) {
     handleSetFocusedDate(undefined);
   }, [calendarMonth, handleSetCalendarMonth, handleSetFocusedDate]);
 
-  const setNextYear = React.useCallback(() => {
+  const setNextCalendarYear = React.useCallback(() => {
     const newDate = new Date(
       new Date(calendarMonth).setFullYear(calendarMonth.getFullYear() + 1)
     );
@@ -248,7 +316,7 @@ export function useTemporal(config?: TemporalConfig) {
     handleSetFocusedDate(undefined);
   }, [calendarMonth, handleSetCalendarMonth, handleSetFocusedDate]);
 
-  const setToday = React.useCallback(() => {
+  const setCalendarToday = React.useCallback(() => {
     const newDate = new Date(new Date());
 
     handleSetCalendarMonth(newDate);
@@ -260,71 +328,87 @@ export function useTemporal(config?: TemporalConfig) {
    */
 
   const selectPreviousYear = React.useCallback(() => {
-    if (!selectedDate) return;
-    const newDate = new Date(
-      new Date(selectedDate).setFullYear(selectedDate.getFullYear() - 1)
+    if (config.type !== "single") return;
+
+    if (!(computedValue instanceof Date)) return;
+
+    handleValueChange(
+      new Date(
+        new Date(computedValue).setFullYear(computedValue.getFullYear() - 1)
+      )
     );
 
-    handleSetSelectedDate(newDate);
     handleSetFocusedDate(undefined);
-  }, [handleSetFocusedDate, handleSetSelectedDate, selectedDate]);
+  }, [config.type, computedValue, handleSetFocusedDate, handleValueChange]);
 
   const selectNextYear = React.useCallback(() => {
-    if (!selectedDate) return;
-    const newDate = new Date(
-      new Date(selectedDate).setFullYear(selectedDate.getFullYear() + 1)
+    if (config.type !== "single") return;
+
+    if (!(computedValue instanceof Date)) return;
+
+    handleValueChange(
+      new Date(
+        new Date(computedValue).setFullYear(computedValue.getFullYear() + 1)
+      )
     );
 
-    handleSetSelectedDate(newDate);
     handleSetFocusedDate(undefined);
-  }, [handleSetFocusedDate, handleSetSelectedDate, selectedDate]);
+  }, [config.type, computedValue, handleSetFocusedDate, handleValueChange]);
 
   const selectPreviousMonth = React.useCallback(() => {
-    if (!selectedDate) return;
-    const newDate = new Date(
-      new Date(selectedDate).setMonth(selectedDate.getMonth() - 1)
+    if (config.type !== "single") return;
+
+    if (!(computedValue instanceof Date)) return;
+
+    handleValueChange(
+      new Date(new Date(computedValue).setMonth(computedValue.getMonth() - 1))
     );
 
-    handleSetSelectedDate(newDate);
     handleSetFocusedDate(undefined);
-  }, [handleSetFocusedDate, handleSetSelectedDate, selectedDate]);
+  }, [config.type, computedValue, handleSetFocusedDate, handleValueChange]);
 
   const selectNextMonth = React.useCallback(() => {
-    if (!selectedDate) return;
-    const newDate = new Date(
-      new Date(selectedDate).setMonth(selectedDate.getMonth() + 1)
+    if (config.type !== "single") return;
+
+    if (!(computedValue instanceof Date)) return;
+
+    handleValueChange(
+      new Date(new Date(computedValue).setMonth(computedValue.getMonth() + 1))
     );
 
-    handleSetSelectedDate(newDate);
     handleSetFocusedDate(undefined);
-  }, [handleSetFocusedDate, handleSetSelectedDate, selectedDate]);
+  }, [config.type, computedValue, handleSetFocusedDate, handleValueChange]);
 
   const selectPreviousDate = React.useCallback(() => {
-    if (!selectedDate) return;
-    const newDate = new Date(
-      new Date(selectedDate).setDate(selectedDate.getDate() - 1)
+    if (config.type !== "single") return;
+
+    if (!(computedValue instanceof Date)) return;
+
+    handleValueChange(
+      new Date(new Date(computedValue).setDate(computedValue.getMonth() - 1))
     );
 
-    handleSetSelectedDate(newDate);
     handleSetFocusedDate(undefined);
-  }, [handleSetFocusedDate, handleSetSelectedDate, selectedDate]);
+  }, [config.type, computedValue, handleSetFocusedDate, handleValueChange]);
 
   const selectNextDate = React.useCallback(() => {
-    if (!selectedDate) return;
-    const newDate = new Date(
-      new Date(selectedDate).setDate(selectedDate.getDate() + 1)
+    if (config.type !== "single") return;
+
+    if (!(computedValue instanceof Date)) return;
+
+    handleValueChange(
+      new Date(new Date(computedValue).setDate(computedValue.getMonth() + 1))
     );
 
-    handleSetSelectedDate(newDate);
     handleSetFocusedDate(undefined);
-  }, [handleSetFocusedDate, handleSetSelectedDate, selectedDate]);
+  }, [config.type, computedValue, handleSetFocusedDate, handleValueChange]);
 
   /**
    * Select Ranges
    */
   const clearSelectedRange = React.useCallback(() => {
-    setSelectedRange({});
-    setPreviewedRange({});
+    setValue(undefined);
+    setPreviewedRange(undefined);
   }, []);
 
   const days = React.useMemo(() => {
@@ -332,63 +416,56 @@ export function useTemporal(config?: TemporalConfig) {
 
     const date = new Date();
 
-    while (date.getDay() !== computedConfig.weekStartIndex) {
+    while (date.getDay() !== config.weekStartIndex) {
       date.setDate(date.getDate() + 1);
     }
 
     for (let i = 0; i < 7; i++) {
       days.push({
         index: i,
-        long: date.toLocaleString(computedConfig.locale, { weekday: "long" }),
-        narrow: date.toLocaleString(computedConfig.locale, {
+        long: date.toLocaleString(config.locale, { weekday: "long" }),
+        narrow: date.toLocaleString(config.locale, {
           weekday: "narrow",
         }),
-        short: date.toLocaleString(computedConfig.locale, { weekday: "short" }),
+        short: date.toLocaleString(config.locale, { weekday: "short" }),
       });
       date.setDate(date.getDate() + 1);
     }
 
     return days;
-  }, [computedConfig.locale, computedConfig.weekStartIndex]);
+  }, [config.locale, config.weekStartIndex]);
 
   const months = React.useMemo(() => {
     return [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].map(function (mon) {
       const date = new Date(2000, mon);
       return {
         index: mon,
-        short: date.toLocaleString(computedConfig.locale, { month: "short" }),
-        long: date.toLocaleString(computedConfig.locale, { month: "long" }),
-        "2-digit": date.toLocaleString(computedConfig.locale, {
+        short: date.toLocaleString(config.locale, { month: "short" }),
+        long: date.toLocaleString(config.locale, { month: "long" }),
+        "2-digit": date.toLocaleString(config.locale, {
           month: "2-digit",
         }),
-        narrow: date.toLocaleString(computedConfig.locale, { month: "narrow" }),
-        numeric: date.toLocaleString(computedConfig.locale, {
+        narrow: date.toLocaleString(config.locale, { month: "narrow" }),
+        numeric: date.toLocaleString(config.locale, {
           month: "numeric",
         }),
       };
     });
-  }, [computedConfig.locale]);
+  }, [config.locale]);
 
   const getDateProps: (date: Date, currentMonth: number) => DateProps =
     React.useCallback(
       (date: Date, currentMonth) => {
         return {
           ref: (ref) => {
-            if (ref) dateRefs.current[date.toDateString()] = ref;
+            if (ref) visibleDateRefs.current[date.toDateString()] = ref;
           },
           key: date.toDateString(),
           tabIndex: date.getMonth() === currentMonth ? undefined : -1,
           onClick: () => {
-            switch (computedConfig.type) {
-              case "single":
-                handleSetSelectedDate(date);
-                break;
-              case "range":
-                handleSetSelectedRange(date);
-                break;
-            }
+            handleValueChange(date);
           },
-          ...(computedConfig.type === "range" && {
+          ...(config.type === "range" && {
             onMouseEnter: () => {
               handleSetPreviewedRange(date);
             },
@@ -418,84 +495,81 @@ export function useTemporal(config?: TemporalConfig) {
         };
       },
       [
-        computedConfig.type,
+        config.type,
         handleSetFocusedDate,
         handleSetPreviewedRange,
-        handleSetSelectedDate,
-        handleSetSelectedRange,
+        handleValueChange,
       ]
     );
 
   const getDates = React.useCallback(
-    (calendarMonth: Date) => {
+    (calendarMonth: Date, monthsVisible: string | number) => {
       const dates: Iterable<Day> = [];
 
       dates[Symbol.iterator] = function* (): Generator<Day> {
-        const currentMonth = new Date(new Date(calendarMonth).setDate(1));
+        const startMonthDate = new Date(new Date(calendarMonth).setDate(1));
+        const finalMonthDate = new Date(
+          new Date(startMonthDate).setMonth(
+            startMonthDate.getMonth() + Number(monthsVisible)
+          )
+        );
 
-        const startMonth = new Date(currentMonth).getMonth();
-        const previousMonth = new Date(
-          new Date(currentMonth).setMonth(startMonth - 1)
-        ).getMonth();
-        const nextMonth = new Date(
-          new Date(currentMonth).setMonth(startMonth + 1)
-        ).getMonth();
-
-        const currentDate = new Date(currentMonth);
+        const currentDate = new Date(startMonthDate);
 
         while (currentDate.getDate() !== 1) {
           currentDate.setDate(currentDate.getDate() - 1);
         }
 
-        while (currentDate.getDay() !== computedConfig.weekStartIndex) {
+        while (currentDate.getDay() !== config.weekStartIndex) {
           currentDate.setDate(currentDate.getDate() - 1);
         }
 
         while (
-          [previousMonth, startMonth].includes(currentDate.getMonth()) ||
-          (currentDate.getMonth() === nextMonth &&
-            currentDate.getDay() !== computedConfig.weekStartIndex)
+          currentDate.getTime() < finalMonthDate.getTime() ||
+          currentDate.getDay() !== config.weekStartIndex
         ) {
           const yieldDate = new Date(currentDate);
 
           yield {
             date: yieldDate,
             isToday: yieldDate.toDateString() === new Date().toDateString(),
-            ...(computedConfig.type === "single" && {
+            ...(config.type === "single" && {
               isSelected:
-                yieldDate.toDateString() === selectedDate?.toDateString(),
+                yieldDate.toDateString() === computedValue?.toDateString(),
             }),
-            ...(computedConfig.type === "range" && {
+            ...(config.type === "range" && {
               isSelectedRange:
-                !!selectedRange.start &&
-                yieldDate >= selectedRange.start &&
-                !!selectedRange.end &&
-                yieldDate <= selectedRange.end,
+                !!computedValue?.start &&
+                yieldDate >= computedValue.start &&
+                !!computedValue.end &&
+                yieldDate <= computedValue.end,
               isSelectedRangeStart:
-                !!selectedRange.start &&
+                !!computedValue?.start &&
                 yieldDate.toDateString() ===
-                  selectedRange.start?.toDateString(),
+                  computedValue.start?.toDateString(),
               isSelectedRangeEnd:
-                !!selectedRange.end &&
-                yieldDate.toDateString() === selectedRange.end?.toDateString(),
+                !!computedValue?.end &&
+                yieldDate.toDateString() === computedValue.end?.toDateString(),
               isPreviewedRange:
-                !!previewedRange.start &&
+                !!previewedRange?.start &&
                 yieldDate >= previewedRange.start &&
                 !!previewedRange.end &&
                 yieldDate <= previewedRange.end,
               isPreviewedRangeStart:
                 yieldDate.toDateString() ===
-                previewedRange.start?.toDateString(),
+                previewedRange?.start?.toDateString(),
               isPreviewedRangeEnd:
-                yieldDate.toDateString() === previewedRange.end?.toDateString(),
+                yieldDate.toDateString() ===
+                previewedRange?.end?.toDateString(),
             }),
             isWeekday: [1, 2, 3, 4, 5].includes(yieldDate.getDay()),
             isWeekend: [0, 6].includes(yieldDate.getDay()),
-            isCurrentMonth: yieldDate.getMonth() === startMonth,
-            isPreviousMonth: yieldDate.getMonth() === startMonth - 1,
-            isNextMonth: yieldDate.getMonth() === startMonth + 1,
+            isCurrentMonth: yieldDate.getMonth() === startMonthDate.getMonth(),
+            isPreviousMonth:
+              yieldDate.getMonth() === startMonthDate.getMonth() - 1,
+            isNextMonth: yieldDate.getMonth() === startMonthDate.getMonth() + 1,
             getDateProps: () =>
-              getDateProps(yieldDate, currentMonth.getMonth()),
+              getDateProps(yieldDate, startMonthDate.getMonth()),
           };
 
           currentDate.setDate(currentDate.getDate() + 1);
@@ -505,35 +579,36 @@ export function useTemporal(config?: TemporalConfig) {
       return Array.from(dates);
     },
     [
-      computedConfig.type,
-      computedConfig.weekStartIndex,
+      config.type,
+      config.weekStartIndex,
+      computedValue,
       getDateProps,
-      previewedRange.end,
-      previewedRange.start,
-      selectedDate,
-      selectedRange.end,
-      selectedRange.start,
+      previewedRange?.end,
+      previewedRange?.start,
     ]
   );
 
   const dates = React.useMemo(
-    () => getDates(calendarMonth),
-    [calendarMonth, getDates]
+    () => getDates(calendarMonth, config.monthsVisible),
+    [calendarMonth, config.monthsVisible, getDates]
   );
 
   const getCalendarProps: () => CalendarProps = React.useCallback(() => {
     return {
-      ...(computedConfig.type === "range" && {
+      ...(config.type === "range" && {
         onMouseLeave: () => {
-          if (computedConfig.type === "range") setPreviewedRange({});
+          if (config.type === "range") setPreviewedRange({});
         },
       }),
     };
-  }, [computedConfig.type]);
+  }, [config.type]);
 
   const getInputProps: () => InputProps = React.useCallback(() => {
     return {
-      value: selectedDate?.toLocaleDateString() || "",
+      value:
+        computedValue instanceof Date
+          ? computedValue?.toLocaleDateString()
+          : "",
       onChange: () => {
         return null;
       },
@@ -544,14 +619,14 @@ export function useTemporal(config?: TemporalConfig) {
       onKeyDown: (e) => {
         keysPressed.current[e.key] = true;
 
-        if (e.key === "ArrowUp" && selectedDate) {
+        if (e.key === "ArrowUp" && computedValue) {
           if (keysPressed.current["Shift"] && keysPressed.current["Alt"])
             selectNextYear();
           else if (keysPressed.current["Shift"]) selectNextMonth();
           else selectNextDate();
         }
 
-        if (e.key === "ArrowDown" && selectedDate) {
+        if (e.key === "ArrowDown" && computedValue) {
           if (keysPressed.current["Shift"] && keysPressed.current["Alt"])
             selectPreviousYear();
           else if (keysPressed.current["Shift"]) selectPreviousMonth();
@@ -560,31 +635,30 @@ export function useTemporal(config?: TemporalConfig) {
       },
     };
   }, [
-    selectedDate,
-    selectPreviousMonth,
-    selectPreviousYear,
-    selectPreviousDate,
-    selectNextMonth,
+    computedValue,
     selectNextYear,
+    selectNextMonth,
     selectNextDate,
+    selectPreviousYear,
+    selectPreviousMonth,
+    selectPreviousDate,
   ]);
 
   React.useEffect(() => {
-    dateRefs.current = Object.fromEntries(
-      Object.entries(dateRefs.current).filter(([, value]) => !!value)
+    visibleDateRefs.current = Object.fromEntries(
+      Object.entries(visibleDateRefs.current).filter(([, value]) => !!value)
     );
   }, []);
 
   React.useEffect(() => {
     if (!focusedDate) return;
-    dateRefs.current[focusedDate?.toDateString()]?.focus();
+    visibleDateRefs.current[focusedDate?.toDateString()]?.focus();
   }, [focusedDate]);
 
   return {
     getInputProps,
     getCalendarProps,
-    selectedDate,
-    selectedRange,
+    value,
     days,
     months,
     calendar: {
@@ -593,16 +667,15 @@ export function useTemporal(config?: TemporalConfig) {
       dates,
     },
     methods: {
-      setMonth,
-      setPreviousMonth,
-      setNextMonth,
-      setYear,
-      setPreviousYear,
-      setNextYear,
-      setToday,
+      setCalendarMonth: handleSetCalendarMonth,
+      setPreviousCalendarMonth,
+      setNextCalendarMonth,
+      setCalendarYear,
+      setPreviousCalendarYear,
+      setNextCalendarYear,
+      setCalendarToday,
       selectPreviousDate,
       selectNextDate,
-      setSelectedDate: handleSetSelectedDate,
       clearSelectedRange,
     },
   };
@@ -632,3 +705,80 @@ function getDateAtEndOfDay(date?: Date) {
   if (!date) return;
   return new Date(new Date(date.setHours(23, 59, 59, 999)));
 }
+
+export const dynamicDates = {
+  TODAY: new Date(),
+  YESTERDAY: new Date(
+    new Date(new Date().setDate(new Date().getDate() - 1)).setHours(0, 0, 0, 0)
+  ),
+  TOMORROW: new Date(
+    new Date(new Date().setDate(new Date().getDate() + 1)).setHours(0, 0, 0, 0)
+  ),
+};
+
+export const dynamicDateRanges = {
+  TODAY: {
+    name: "Today",
+    start: new Date(new Date().setHours(0, 0, 0, 0)),
+    end: new Date(),
+  },
+  YESTERDAY: {
+    name: "Yesterday",
+    start: new Date(
+      new Date(new Date().setDate(new Date().getDate() - 1)).setHours(
+        0,
+        0,
+        0,
+        0
+      )
+    ),
+    end: new Date(
+      new Date(new Date().setDate(new Date().getDate() - 1)).setHours(
+        23,
+        59,
+        59,
+        999
+      )
+    ),
+  },
+  THIS_MONTH: {
+    name: "This Month",
+    start: new Date(new Date(new Date().setDate(1)).setHours(0, 0, 0, 0)),
+    end: new Date(),
+  },
+  LAST_MONTH: {
+    name: "Last Month",
+    start: new Date(
+      new Date().getFullYear(),
+      new Date().getMonth() - 1,
+      1,
+      0,
+      0,
+      0,
+      0
+    ),
+    end: new Date(new Date(new Date().setDate(0)).setHours(23, 59, 59, 999)),
+  },
+  LAST_90_DAYS: {
+    name: "Last 90 Days",
+    start: new Date(
+      new Date(new Date().setDate(new Date().getDate() - 90)).setHours(
+        0,
+        0,
+        0,
+        0
+      )
+    ),
+    end: new Date(),
+  },
+  THIS_YEAR: {
+    name: "This Year",
+    start: new Date(new Date().getFullYear(), 0, 1, 0, 0, 0, 0),
+    end: new Date(),
+  },
+  LAST_YEAR: {
+    name: "Last Year",
+    start: new Date(new Date().getFullYear() - 1, 0, 1),
+    end: new Date(new Date().getFullYear() - 1, 11, 31, 23, 59, 59, 999),
+  },
+};
