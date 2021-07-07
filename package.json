@@ -1,6 +1,6 @@
 {
   "name": "react-temporal",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "Headless Datetime Picker for React",
   "author": "Anthony Garand",
   "license": "ISC",
