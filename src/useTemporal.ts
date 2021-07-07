@@ -724,7 +724,7 @@ export const dynamicDateRanges = {
   TODAY: {
     name: "Today",
     start: new Date(new Date().setHours(0, 0, 0, 0)),
-    end: new Date(),
+    end: new Date(new Date().setHours(23, 59, 59, 999)),
   },
   YESTERDAY: {
     name: "Yesterday",
@@ -748,7 +748,14 @@ export const dynamicDateRanges = {
   THIS_MONTH: {
     name: "This Month",
     start: new Date(new Date(new Date().setDate(1)).setHours(0, 0, 0, 0)),
-    end: new Date(),
+    end: new Date(
+      new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).setHours(
+        23,
+        59,
+        59,
+        999
+      )
+    ),
   },
   LAST_MONTH: {
     name: "Last Month",
@@ -778,7 +785,9 @@ export const dynamicDateRanges = {
   THIS_YEAR: {
     name: "This Year",
     start: new Date(new Date().getFullYear(), 0, 1, 0, 0, 0, 0),
-    end: new Date(),
+    end: new Date(
+      new Date(new Date().getFullYear() + 1, 0, 0).setHours(23, 59, 59, 999)
+    ),
   },
   LAST_YEAR: {
     name: "Last Year",
