@@ -116,7 +116,22 @@ export function useTemporal(defaultConfig?: Partial<TemporalConfig>) {
             return dynamicDateRanges[config.value];
           }
         }
-      } else return config.value;
+      } else {
+        switch (config.type) {
+          case "single": {
+            return config.value;
+          }
+          case "range": {
+            if (config.value instanceof Date) return;
+            return {
+              ...(config.value?.start && {
+                start: new Date(config.value?.start),
+              }),
+              ...(config.value?.end && { end: new Date(config.value?.end) }),
+            };
+          }
+        }
+      }
     } else {
       if (typeof value === "string") {
         switch (config.type) {
@@ -129,7 +144,20 @@ export function useTemporal(defaultConfig?: Partial<TemporalConfig>) {
             return dynamicDateRanges[value];
           }
         }
-      } else return value;
+      } else {
+        switch (config.type) {
+          case "single": {
+            return value;
+          }
+          case "range": {
+            if (value instanceof Date) return;
+            return {
+              ...(value?.start && { start: new Date(value?.start) }),
+              ...(value?.end && { end: new Date(value?.end) }),
+            };
+          }
+        }
+      }
     }
   }, [config.type, config.value, isControlled, value]);
 
