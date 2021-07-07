@@ -4,7 +4,7 @@ export interface TemporalConfig {
   locale: string;
   defaultValue?: TemporalValue;
   value?: TemporalValue;
-  onValueChange?: (value: TemporalValue) => void;
+  onValueChange?: (value?: TemporalValue) => void;
   defaultCalendarMonth: Date;
   monthsVisible: string | number;
   weekStartIndex: string | number;
