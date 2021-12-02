@@ -19,18 +19,23 @@
     "datetime",
     "headless"
   ],
-  "main": "./dist/useTemporal.js",
-  "types": "./dist/useTemporal.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/esm/useTemporal.mjs",
+      "require": "./dist/cjs/useTemporal.cjs"
+    }
+  },
+  "types": "./dist/types/useTemporal.d.ts",
   "sideEffects": false,
   "files": [
     "dist"
   ],
   "scripts": {
     "dev": "rimraf dist && concurrently npm:dev:*",
-    "dev:src": "esbuild src/useTemporal.ts --outfile=./dist/useTemporal.js --watch --sourcemap",
+    "dev:src": "node ./build.js --watch",
     "dev:types": "tsc --watch",
     "build": "rimraf dist && concurrently npm:build:*",
-    "build:src": "esbuild src/useTemporal.ts --outfile=./dist/useTemporal.js --minify",
+    "build:src": "cross-env NODE_ENV=production node ./build.js",
     "build:types": "tsc"
   },
   "devDependencies": {
@@ -38,6 +43,7 @@
     "@typescript-eslint/eslint-plugin": "^4.28.0",
     "@typescript-eslint/parser": "^4.28.0",
     "concurrently": "^6.2.0",
+    "cross-env": "^7.0.3",
     "esbuild": "^0.12.9",
     "eslint": "^7.29.0",
     "eslint-config-prettier": "^8.3.0",
