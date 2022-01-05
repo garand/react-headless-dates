@@ -1,3 +1,3 @@
-# React Temporal
+# React Headless Dates
 
-Headless Datetime Picker for React
+Headless Date & Time Picker for React 
